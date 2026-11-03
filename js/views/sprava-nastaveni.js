@@ -5,6 +5,7 @@ import { CONFIG, appUrl } from '../config.js';
 import { PATRA, TYP_WC, KATEGORIE, randomToken, defaultSettings } from '../store/schema.js';
 import { breaks, hmStr, startOfDay, addDays, dateKey } from '../time.js';
 import { incidentVisitors } from '../logic.js';
+import { wcBadge } from '../wc.js';
 import { loadRange } from '../data.js';
 
 export async function render(el, ctx, page, r) {
@@ -422,8 +423,8 @@ async function qr(el, ctx) {
       code = h('div', { html: q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }) });
     } else code = h('div', { class: 'box dashed', style: { width: '42mm', height: '42mm', fontSize: '8pt' } }, 'QR kód se nenačetl (chybí internet).');
     return h('div', { class: 'qr-card' },
-      h('div', { class: 'eyebrow' }, 'Záchody – kontrola stavu'),
-      h('div', { class: 'name' }, t.nazev),
+      h('div', { class: 'qr-head' }, wcBadge(t, 'plain', 'xl'),
+        h('div', null, h('div', { class: 'eyebrow' }, 'Kontrola stavu'), h('div', { class: 'name' }, t.nazev))),
       h('div', { class: 'qr' }, code,
         h('div', { class: 'txt' },
           h('p', null, 'Naskenuj a potvrď stav. Dvě ťuknutí.'),

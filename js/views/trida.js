@@ -5,6 +5,7 @@ import { h, mount, mark, modal, toast, longPress, uid, fmt, studentName, promptD
 import { period, dateKey, isoDay, isSchoolDay, atMin } from '../time.js';
 import { PATRA } from '../store/schema.js';
 import * as auth from '../auth.js';
+import { wcBadge } from '../wc.js';
 
 const ADMIN_ROOM_KEY = 'tablet-admin-ucebna';
 // Stav se drží zvlášť pro každou učebnu (v testu se mezi tablety přepíná v jednom prohlížeči).
@@ -303,15 +304,15 @@ export async function render(el, ctx) {
     const wcs = [...ref.toalety.filter((t) => t.aktivni !== false)].sort((a, b) => (a.typ === z.typWC ? 0 : 1) - (b.typ === z.typWC ? 0 : 1) || a.patro - b.patro);
     let autoT = null;
     const close = modal((close) => {
-      const where = h('p', { class: 'where' });
-      const setWhere = () => { const t = ref.toalety.find((x) => x.id === chosen); where.textContent = `Toaleta: ${t ? t.nazev : '?'}`; };
+      const where = h('p', { class: 'where wc-where' });
+      const setWhere = () => { const t = ref.toalety.find((x) => x.id === chosen); mount(where, wcBadge(t, 'plain'), h('span', null, t ? t.nazev : '?')); };
       setWhere();
       const chips = h('div', { class: 'wc-choice' }, wcs.map((t) => {
         const b = h('button', { 'aria-pressed': String(t.id === chosen), onclick: () => {
           chosen = t.id; setWhere();
           chips.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', 'false'));
           b.setAttribute('aria-pressed', 'true');
-        } }, t.nazev);
+        } }, wcBadge(t, 'plain', 'sm'), t.nazev);
         return b;
       }));
       return [h('div', { class: 'confirm-big' },

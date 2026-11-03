@@ -2,6 +2,7 @@
 
 import { h, mark, fmt } from '../ui.js';
 import { PATRA } from '../store/schema.js';
+import { wcBadge, wcTag } from '../wc.js';
 
 export function dozorNav(ctx, current) {
   const uklid = ctx.user.role === 'uklid';
@@ -22,10 +23,12 @@ export function statusMark(state) {
 }
 
 export function legend() {
+  const demo = { patro: 0, typ: 'CH', nazev: 'Přízemí – chlapci' };
   return h('div', { class: 'legend' },
-    h('span', null, mark('ok'), 'v pořádku'),
-    h('span', null, mark('bad'), 'škoda'),
-    h('span', null, mark('wait'), 'dnes nekontrolováno'));
+    h('span', null, wcBadge(demo, 'ok', 'sm'), 'kruh – v pořádku'),
+    h('span', null, wcBadge(demo, 'bad', 'sm'), 'čtverec – škoda'),
+    h('span', null, wcBadge(demo, 'wait', 'sm'), 'čárkovaně – dnes nekontrolováno'),
+    h('span', null, 'číslo = patro (0 přízemí), \u2642\uFE0E chlapci, \u2640\uFE0E dívky'));
 }
 
 export function lastCheckText(last, now = new Date()) {
@@ -35,4 +38,4 @@ export function lastCheckText(last, now = new Date()) {
   return `${res} – ${sameDay ? fmt.time(last.cas) : fmt.dt(last.cas)}${last.jmeno ? `, ${last.jmeno}` : ''}`;
 }
 
-export { PATRA };
+export { PATRA, wcBadge, wcTag };

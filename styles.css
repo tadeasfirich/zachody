@@ -449,3 +449,45 @@ table.edit input, table.edit select { min-height: 38px; padding: 4px 8px; }
   .test-clock { display: none; }
   .acc-grid { grid-template-columns: 1fr; }
 }
+
+/* ================= ZNAČKA TOALETY: patro + symbol =================
+   0♂ = přízemí chlapci, 2♀ = 2. patro dívky. Tvar a výplň nesou stav. */
+.wcb {
+  --s: 46px;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: var(--s); height: var(--s); gap: 0;
+  font-family: "DejaVu Sans", "Segoe UI Symbol", "Noto Sans Symbols", "Apple Symbols", var(--font);
+  font-weight: 700; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  color: var(--ink); vertical-align: middle;
+}
+.wcb .wcb-n { font-size: calc(var(--s) * .44); }
+.wcb .wcb-s { font-size: calc(var(--s) * .40); margin-left: .02em; }
+.wcb.ok { border-radius: 50%; background: var(--kobalt); color: #fff; }
+.wcb.bad { background: var(--ink); color: #fff; }
+.wcb.wait { border-radius: 50%; border: 2.5px dashed var(--ink); }
+.wcb.plain { border: 2px solid var(--ink); border-radius: 6px; width: auto; min-width: var(--s); padding: 0 calc(var(--s) * .14); }
+.wcb.s-sm { --s: 28px; }
+.wcb.s-sm.wait { border-width: 1.5px; }
+.wcb.s-sm.plain { border-width: 1.5px; border-radius: 4px; }
+.wcb.s-lg { --s: 72px; }
+.wcb.s-lg.wait { border-width: 3px; }
+.wcb.s-lg.plain { border-width: 3px; border-radius: 8px; }
+.wcb.s-xl { --s: 26mm; }
+.wcb.s-xl.plain { border-width: 1.2mm; border-radius: 3mm; }
+
+.wc-tag { display: inline-flex; align-items: center; gap: 8px; }
+.wc-head { display: flex; align-items: center; gap: 16px; }
+.wc-head .title { margin-bottom: 2px; }
+.wc-where { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.wc-choice button, .seg button { display: inline-flex; align-items: center; gap: 8px; }
+.wc-tile .wcb { --s: 48px; }
+.wc-card .head { align-items: center; gap: 12px; line-height: 1.2; }
+.wc-card .head .code { font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--muted); }
+.legend .wcb { margin-right: 2px; }
+.qr-head { display: flex; align-items: center; gap: 5mm; }
+.qr-card .qr-head .name { font-size: 17pt; }
+@media (max-width: 560px) {
+  .wcb.s-lg { --s: 58px; }
+  .wc-head { gap: 12px; }
+}
+[aria-pressed="true"] .wcb.plain { border-color: #fff; color: #fff; }

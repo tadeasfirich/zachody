@@ -6,7 +6,8 @@ import { slotsForDay, startOfDay, addDays, dateKey, lessons, minOfDay, hmStr, sl
 import { evaluateSlots, toiletStatus, incidentVisitors, overlapAnalysis, compliance, weeklyCounts, avgWindowMin } from '../logic.js';
 import { KATEGORIE, ZAVAZNOST, STAV_INCIDENTU, PATRA } from '../store/schema.js';
 import { loadRange, lastDays, photosOf } from '../data.js';
-import { statusMark, lastCheckText, wcName } from './common.js';
+import { lastCheckText, wcName, wcBadge, wcTag } from './common.js';
+import { wcText } from '../wc.js';
 
 const PAGES = [
   ['', 'Přehled', 'all'],
@@ -94,8 +95,7 @@ async function prehled(el, ctx) {
     h('div', { class: 'wc-cards' }, ref.toalety.filter((t) => t.aktivni !== false).map((t) => {
       const s = toiletStatus(t.id, data, now);
       return h('a', { class: ['wc-card', s.state === 'bad' ? 'alert' : ''], href: `#/sprava/incidenty?wc=${t.id}` },
-        h('span', { class: 'code' }, t.kod),
-        h('span', { class: 'head' }, statusMark(s.state), t.nazev),
+        h('span', { class: 'head' }, wcBadge(t, s.state), h('span', null, h('span', { class: 'code' }, PATRA[t.patro]), h('br'), t.typ === 'CH' ? 'Chlapci' : 'Dívky')),
         h('span', { class: 'small muted' }, lastCheckText(s.last, now)),
         s.open.length ? h('span', { class: 'small' }, h('b', null, `${s.open.length} ${fmt.plural(s.open.length, 'otevřený incident', 'otevřené incidenty', 'otevřených incidentů')}`)) : null);
     })),
@@ -105,7 +105,7 @@ async function prehled(el, ctx) {
         missing.length ? h('table', null,
           h('thead', null, h('tr', null, h('th', null, 'Přestávka'), h('th', null, 'Toaleta'), h('th', null, 'Dozor'))),
           h('tbody', null, missing.map((s) => h('tr', null,
-            h('td', null, slotLabel(s)), h('td', null, wcName(ref, s.toaleta)), h('td', null, s.ucitelJmeno || h('span', { class: 'muted' }, 'nikdo v plánu')))))) :
+            h('td', null, slotLabel(s)), h('td', null, wcTag(ref, s.toaleta)), h('td', null, s.ucitelJmeno || h('span', { class: 'muted' }, 'nikdo v plánu')))))) :
           h('p', { class: 'muted' }, due.length ? 'Zatím nic nevypadlo.' : 'Dnes zatím nebyla žádná povinná kontrola.')),
       h('div', null,
         h('h2', { style: { fontSize: '20px', marginBottom: '10px' } }, 'Poslední incidenty'),
@@ -125,7 +125,7 @@ function incidentTable(ctx, list, navstevy, { compact = false } = {}) {
     h('tbody', null, list.map((i) => h('tr', { class: 'click', onclick: () => { location.hash = `#/sprava/incidenty/${encodeURIComponent(i.id)}`; } },
       h('td', null, mark(i.stav === 'uzavreno' ? 'ok' : 'bad')),
       h('td', { class: 'nowrap' }, fmt.dt(i.casNalezu)),
-      h('td', null, ctx.ref.toalety.find((t) => t.id === i.toaleta)?.kod || i.toaleta),
+      h('td', null, wcBadge(ctx.ref.toalety.find((t) => t.id === i.toaleta), 'plain', 'sm')),
       h('td', null, KATEGORIE[i.kategorie] || i.kategorie),
       compact ? null : h('td', null, ZAVAZNOST[i.zavaznost] || ''),
       h('td', { class: 'n' }, i.siroke ? h('span', { class: 'tag dash', title: 'Široké okno – bez kontroly téhož dne' }, 'široké') : fmt.dur(fmt.mins(i.oknoOd, i.casNalezu))),
@@ -154,13 +154,13 @@ async function incidents(el, ctx, r) {
       h('label', { class: 'field' }, h('span', null, 'Toaleta'),
         h('select', { onchange: (e) => { wc = e.target.value; go(); } },
           h('option', { value: '' }, 'Všechny'),
-          ref.toalety.map((t) => h('option', { value: t.id, selected: t.id === wc || null }, t.nazev)))),
+          ref.toalety.map((t) => h('option', { value: t.id, selected: t.id === wc || null }, wcText(ref, t.id))))),
       h('label', { class: 'field' }, h('span', null, 'Stav'),
         h('select', { onchange: (e) => { stav = e.target.value; go(); } },
           [['', 'Všechny'], ['otevrene', 'Otevřené'], ['novy', 'Nové'], ['resi-se', 'Řeší se'], ['uzavreno', 'Uzavřené']]
             .map(([v, l]) => h('option', { value: v, selected: v === stav || null }, l)))),
       h('button', { class: 'btn ghost', onclick: () => downloadText(`incidenty-${dateKey(new Date())}.csv`, toCsv(list, [
-        { label: 'Nález', get: (i) => fmt.dt(i.casNalezu) }, { label: 'Toaleta', get: (i) => wcName(ref, i.toaleta) },
+        { label: 'Nález', get: (i) => fmt.dt(i.casNalezu) }, { label: 'Toaleta', get: (i) => wcText(ref, i.toaleta) },
         { label: 'Druh', get: (i) => KATEGORIE[i.kategorie] }, { label: 'Závažnost', get: (i) => ZAVAZNOST[i.zavaznost] },
         { label: 'Okno od', get: (i) => fmt.dt(i.oknoOd) }, { label: 'V okně', get: (i) => incidentVisitors(i, data.navstevy).length },
         { label: 'Nahlásil', get: (i) => i.jmeno }, { label: 'Stav', get: (i) => STAV_INCIDENTU[i.stav] }, { label: 'Popis', get: (i) => i.popis },
@@ -195,7 +195,10 @@ async function incidentDetail(el, ctx, id) {
 
   mount(el,
     h('a', { href: '#/sprava/incidenty', class: 'no-print' }, '← Incidenty'),
-    ...H(`Incident – ${t ? t.nazev : inc.toaleta}`, `${KATEGORIE[inc.kategorie] || inc.kategorie}, ${fmt.dt(inc.casNalezu)}`),
+    h('div', { class: 'wc-head' }, wcBadge(t, inc.stav === 'uzavreno' ? 'plain' : 'bad', 'lg'),
+      h('div', null, h('div', { class: 'eyebrow' }, `Incident – ${t ? t.nazev : inc.toaleta}`),
+        h('h1', { class: 'title' }, `${KATEGORIE[inc.kategorie] || inc.kategorie}, ${fmt.dt(inc.casNalezu)}`))),
+    h('hr', { class: 'rule' }),
     h('div', { class: 'grid c3' },
       h('div', { class: 'box' }, h('h4', null, 'Nahlásil(a)'), h('p', { style: { margin: 0 } }, inc.jmeno || inc.nahlasil), h('p', { class: 'muted small', style: { margin: 0 } }, inc.role === 'uklid' ? 'úklid' : 'dozor')),
       h('div', { class: 'box' }, h('h4', null, 'Závažnost'), h('p', { style: { margin: 0 } }, ZAVAZNOST[inc.zavaznost] || '–')),
@@ -275,7 +278,7 @@ async function analysis(el, ctx, r) {
   const showIncidents = (title, ids) => modal((close) => [
     h('h2', { class: 'title' }, title), h('hr', { class: 'rule' }),
     h('table', null, h('tbody', null, ids.map((id) => incMap.get(id)).filter(Boolean).map((i) => h('tr', { class: 'click', onclick: () => { close(); location.hash = `#/sprava/incidenty/${encodeURIComponent(i.id)}`; } },
-      h('td', null, fmt.dt(i.casNalezu)), h('td', null, wcName(ref, i.toaleta)), h('td', null, KATEGORIE[i.kategorie]))))),
+      h('td', null, fmt.dt(i.casNalezu)), h('td', null, wcTag(ref, i.toaleta)), h('td', null, KATEGORIE[i.kategorie]))))),
     h('div', { class: 'btn-row', style: { marginTop: '14px' } }, h('button', { class: 'btn ghost', onclick: close }, 'Zavřít')),
   ]);
   const exBar = (v) => h('div', { class: 'bar ink', title: `${v.toFixed(1)} nad očekávání` }, h('i', { style: { width: `${Math.max(0, (v / maxEx) * 100)}%` } }));
@@ -356,13 +359,13 @@ async function plneni(el, ctx, r) {
       h('thead', null, h('tr', null, h('th', null, 'Den'), h('th', null, 'Přestávka'), h('th', null, 'Toaleta'), h('th', null, 'Dozor'))),
       h('tbody', null, missed.slice(0, 25).map((s) => h('tr', null,
         h('td', { class: 'nowrap' }, `${fmt.dayShort(s.od)} ${fmt.date(s.od)}`), h('td', null, slotLabel(s)),
-        h('td', null, wcName(ref, s.toaleta)), h('td', null, s.ucitelJmeno || '–')))))) : h('p', { class: 'muted' }, 'Nic nevypadlo.'));
+        h('td', null, wcTag(ref, s.toaleta)), h('td', null, s.ucitelJmeno || '–')))))) : h('p', { class: 'muted' }, 'Nic nevypadlo.'));
 
   function showMissed(p) {
     modal((close) => [
       h('h2', { class: 'title' }, p.jmeno), h('p', { class: 'muted' }, `Splněno ${p.done} z ${p.expected}`), h('hr', { class: 'rule' }),
       p.missed.length ? h('table', null, h('tbody', null, p.missed.sort((a, b) => b.od - a.od).map((s) => h('tr', null,
-        h('td', { class: 'nowrap' }, `${fmt.dayShort(s.od)} ${fmt.date(s.od)}`), h('td', null, slotLabel(s)), h('td', null, wcName(ref, s.toaleta)))))) : h('p', null, 'Bez vynechání.'),
+        h('td', { class: 'nowrap' }, `${fmt.dayShort(s.od)} ${fmt.date(s.od)}`), h('td', null, slotLabel(s)), h('td', null, wcTag(ref, s.toaleta)))))) : h('p', null, 'Bez vynechání.'),
       h('div', { class: 'btn-row', style: { marginTop: '14px' } }, h('button', { class: 'btn ghost', onclick: close }, 'Zavřít')),
     ]);
   }
@@ -423,7 +426,7 @@ async function statistiky(el, ctx, r) {
       h('div', null,
         h('h2', { style: { fontSize: '20px', marginBottom: '8px' } }, 'Podle toalety'),
         h('table', null, h('tbody', null, byWc.map((x) => h('tr', null,
-          h('td', null, x.t.nazev), h('td', { class: 'n' }, String(x.n)),
+          h('td', null, wcTag(ref, x.t.id)), h('td', { class: 'n' }, String(x.n)),
           h('td', { style: { width: '45%' } }, h('div', { class: 'bar', title: `${x.n}` }, h('i', { style: { width: `${(x.n / maxWc) * 100}%` } })))))))),
       h('div', null,
         h('h2', { style: { fontSize: '20px', marginBottom: '8px' } }, 'Podle druhu'),

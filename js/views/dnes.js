@@ -5,7 +5,7 @@ import { slotsForDay, slotLabel, startOfDay, myDuties } from '../time.js';
 import { evaluateSlots, toiletStatus } from '../logic.js';
 import { KATEGORIE, PATRA } from '../store/schema.js';
 import { loadRange } from '../data.js';
-import { dozorNav, statusMark, lastCheckText, wcName, legend } from './common.js';
+import { dozorNav, lastCheckText, legend, wcBadge, wcTag } from './common.js';
 
 const STATUS = {
   done: ['ok', 'Splněno'],
@@ -38,7 +38,7 @@ export async function render(el, ctx) {
           return h('tr', { class: 'click', onclick: () => { location.hash = `#/kontrola/${s.toaleta}`; } },
             h('td', null, mark(m)),
             h('td', { class: 'nowrap' }, `${s.prestavka}.`),
-            h('td', null, wcName(ref, s.toaleta)),
+            h('td', null, wcTag(ref, s.toaleta)),
             h('td', { class: 'muted' }, `${slotLabel(s).split(' – ')[1]} (${fmt.time(s.od)}–${fmt.time(s.do)})`),
             h('td', null, s.status === 'done' ? `${l} ${fmt.time(s.kontrola.cas)}` : l));
         })))) : h('div', { class: 'box fill' }, h('p', { style: { margin: 0 } }, 'Dnes nemáš podle plánu žádný dozor. Kontrolu můžeš zapsat kdykoli – stačí naskenovat QR kód.')),
@@ -58,8 +58,7 @@ export async function render(el, ctx) {
       const s = toiletStatus(t.id, data, now);
       const n = data.kontroly.filter((k) => k.toaleta === t.id).length;
       return h('a', { class: ['wc-card', s.state === 'bad' ? 'alert' : ''], href: `#/kontrola/${t.id}` },
-        h('span', { class: 'code' }, PATRA[t.patro]),
-        h('span', { class: 'head' }, statusMark(s.state), t.typ === 'CH' ? 'Chlapci' : 'Dívky'),
+        h('span', { class: 'head' }, wcBadge(t, s.state), h('span', null, h('span', { class: 'code' }, PATRA[t.patro]), h('br'), t.typ === 'CH' ? 'Chlapci' : 'Dívky')),
         h('span', { class: 'small muted' }, lastCheckText(s.last, now)),
         h('span', { class: 'small muted' }, `dnes ${n} ${fmt.plural(n, 'kontrola', 'kontroly', 'kontrol')}`));
     })),
@@ -72,7 +71,7 @@ export async function render(el, ctx) {
     inc.length ? h('div', { class: 'table-wrap' }, h('table', null,
       h('thead', null, h('tr', null, h('th', null, 'Čas'), h('th', null, 'Toaleta'), h('th', null, 'Druh'), h('th', null, 'Nahlásil(a)'))),
       h('tbody', null, inc.map((i) => h('tr', null,
-        h('td', { class: 'num' }, fmt.time(i.casNalezu)), h('td', null, wcName(ref, i.toaleta)),
+        h('td', { class: 'num' }, fmt.time(i.casNalezu)), h('td', null, wcTag(ref, i.toaleta)),
         h('td', null, KATEGORIE[i.kategorie] || i.kategorie), h('td', null, i.jmeno || i.nahlasil)))))) :
       h('p', { class: 'muted' }, 'Zatím žádné.'));
 

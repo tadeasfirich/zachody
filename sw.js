@@ -1,11 +1,11 @@
 // Service worker: aplikace se načte i bez sítě. Data řeší fronta zápisů v aplikaci, ne tady.
 // Při každé nové verzi zvyš číslo VERSION, ať si zařízení stáhnou nové soubory.
 
-const VERSION = 'zachody-v1';
+const VERSION = 'zachody-v2';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  'js/app.js', 'js/demo-clock.js', 'js/demo-panel.js', 'js/config.js', 'js/ui.js', 'js/time.js', 'js/logic.js', 'js/data.js', 'js/auth.js',
+  'js/app.js', 'js/wc.js', 'js/demo-clock.js', 'js/demo-panel.js', 'js/config.js', 'js/ui.js', 'js/time.js', 'js/logic.js', 'js/data.js', 'js/auth.js',
   'js/store/idb.js', 'js/store/outbox.js', 'js/store/schema.js', 'js/store/demo.js', 'js/store/demo-data.js', 'js/store/sharepoint.js',
   'js/views/common.js', 'js/views/trida.js', 'js/views/kontrola.js', 'js/views/dozor.js', 'js/views/dnes.js',
   'js/views/sprava.js', 'js/views/sprava-nastaveni.js',

@@ -3,7 +3,7 @@
 import { h, mount, mark, toast, uid, fmt, studentName, normalize } from '../ui.js';
 import { myDuties, minOfDay, dateKey, period } from '../time.js';
 import { PATRA } from '../store/schema.js';
-import { dozorNav } from './common.js';
+import { dozorNav, wcBadge } from './common.js';
 
 
 export async function render(el, ctx) {
@@ -38,7 +38,7 @@ export async function render(el, ctx) {
     const p = period(new Date(), ref.zvoneni);
     const wcChips = h('div', { class: 'seg' }, ref.toalety.filter((x) => x.aktivni !== false).map((x) => h('button', {
       'aria-pressed': String(x.id === wcId), onclick: () => { wcId = x.id; openClass = null; persist(); draw(); },
-    }, x.nazev)));
+    }, wcBadge(x, 'plain', 'sm'), x.nazev)));
     const search = h('input', { type: 'search', placeholder: 'Příjmení – stačí 3 písmena', 'aria-label': 'Hledat žáka', style: { fontSize: '19px', minHeight: '54px' } });
     const hits = h('div', { class: 'student-grid', style: { marginTop: '8px' } });
     search.addEventListener('input', () => {
@@ -51,7 +51,7 @@ export async function render(el, ctx) {
     mount(el,
       dozorNav(ctx, 'dozor'),
       h('div', { class: 'eyebrow' }, 'Dozor u dveří'),
-      h('h1', { class: 'title' }, t ? t.nazev : 'Vyber toaletu'),
+      h('div', { class: 'wc-head' }, t ? wcBadge(t, 'plain', 'lg') : null, h('h1', { class: 'title' }, t ? t.nazev : 'Vyber toaletu')),
       h('p', { class: 'sub' }, 'Stůj u dveří a ťukni každého, kdo vchází. Odchod zapisovat nemusíš.'),
       h('hr', { class: 'rule' }),
       zd.length ? h('div', { class: 'box dark', style: { marginBottom: '14px' } },

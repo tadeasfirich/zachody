@@ -5,7 +5,7 @@ import { findSlot, slotLabel, myDuties, startOfDay, addDays, minOfDay, hmStr } f
 import { toiletStatus, computeWindow, visitsInWindow } from '../logic.js';
 import { KATEGORIE, ZAVAZNOST, PATRA } from '../store/schema.js';
 import { loadRange, compressImage } from '../data.js';
-import { dozorNav, statusMark, legend, lastCheckText, wcName } from './common.js';
+import { dozorNav, statusMark, legend, lastCheckText, wcName, wcBadge } from './common.js';
 
 export async function render(el, ctx, r) {
   const kod = r.params[0];
@@ -32,7 +32,7 @@ async function list(el, ctx) {
         const s = toiletStatus(t.id, data, now);
         const mine = duty && Number(duty.patro) === p;
         return h('a', { class: ['wc-tile', mine ? 'mine' : ''], href: `#/kontrola/${t.id}` },
-          statusMark(s.state),
+          wcBadge(t, s.state),
           h('span', null,
             h('span', { class: 't' }, t.typ === 'CH' ? 'Chlapci' : 'Dívky'), h('br'),
             h('span', { class: 's' }, lastCheckText(s.last, now)),
@@ -78,9 +78,12 @@ async function detail(el, ctx, kod, token) {
 
   mount(el,
     dozorNav(ctx, 'kontrola'),
-    h('div', { class: 'eyebrow' }, `${PATRA[t.patro]} – kontrola`),
-    h('h1', { class: 'title' }, t.nazev),
-    h('p', { class: 'sub' }, slot ? `Patří ke kontrole: ${slotLabel(slot)}.` : 'Mimořádná kontrola (mimo rozpis).'),
+    h('div', { class: 'wc-head' },
+      wcBadge(t, s.state, 'lg'),
+      h('div', null,
+        h('div', { class: 'eyebrow' }, `${PATRA[t.patro]} – kontrola`),
+        h('h1', { class: 'title' }, t.nazev),
+        h('p', { class: 'sub' }, slot ? `Patří ke kontrole: ${slotLabel(slot)}.` : 'Mimořádná kontrola (mimo rozpis).'))),
     h('hr', { class: 'rule' }),
     oldQr ? h('div', { class: 'box dashed', style: { marginBottom: '12px' } }, 'Tenhle QR kód je ze starší sady. Kontrola se zapíše, ale dej vědět správci, ať vytiskne nové štítky.') : null,
     decide,
