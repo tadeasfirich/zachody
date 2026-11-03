@@ -491,3 +491,4 @@ table.edit input, table.edit select { min-height: 38px; padding: 4px 8px; }
   .wc-head { gap: 12px; }
 }
 [aria-pressed="true"] .wcb.plain { border-color: #fff; color: #fff; }
+.btn.primary .wcb.plain, .btn.dark .wcb.plain { border-color: #fff; color: #fff; }

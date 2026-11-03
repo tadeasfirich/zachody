@@ -9,7 +9,7 @@ import { dozorNav, statusMark, legend, lastCheckText, wcName, wcBadge } from './
 
 export async function render(el, ctx, r) {
   const kod = r.params[0];
-  if (kod) return detail(el, ctx, kod, r.query.get('t'));
+  if (kod) return detail(el, ctx, kod, r.query.get('t'), r.query.get('par') === '1');
   return list(el, ctx);
 }
 
@@ -56,7 +56,7 @@ async function list(el, ctx) {
 }
 
 // ---------- detail toalety ----------
-async function detail(el, ctx, kod, token) {
+async function detail(el, ctx, kod, token, fromPair = false) {
   const ref = ctx.ref;
   const t = ref.toalety.find((x) => x.id === kod);
   if (!t) {
@@ -106,19 +106,41 @@ async function detail(el, ctx, kod, token) {
     };
   }
 
+  // Druhá toaleta na stejném patře – nabídneme ji jen po první z dvojice
+  // a jen když ji před chvílí (15 min) nikdo nezkontroloval.
+  async function pairOffer() {
+    if (fromPair) return null;
+    const other = ref.toalety.find((x) => Number(x.patro) === Number(t.patro) && x.id !== t.id && x.aktivni !== false);
+    if (!other) return null;
+    const n = new Date();
+    const recent = await ctx.store.query('kontroly', { from: new Date(n.getTime() - 15 * 60000), to: n, toaleta: other.id }).catch(() => []);
+    return recent.length ? null : other;
+  }
+
   async function saveOk() {
     decide.querySelectorAll('button').forEach((b) => { b.disabled = true; });
     const k = kontrolaRecord('ok');
     await ctx.outbox.add('kontroly', k);
-    const other = ref.toalety.find((x) => Number(x.patro) === Number(t.patro) && x.id !== t.id && x.aktivni !== false);
+    const other = await pairOffer();
+    if (!other) {
+      // druhá z dvojice hotová: rovnou zpět na seznam
+      toast(`${t.nazev} – v pořádku, zapsáno.`);
+      ctx.navigate('#/kontrola');
+      return;
+    }
     mount(el, dozorNav(ctx, 'kontrola'),
       h('div', { class: 'done-screen' },
-        mark('ok'),
+        wcBadge(t, 'ok', 'lg'),
         h('h1', { class: 'title' }, 'V pořádku – zapsáno'),
         h('p', { class: 'sub' }, `${t.nazev}, ${fmt.time(k.cas)}. Díky.`),
         h('div', { class: 'btn-row', style: { justifyContent: 'center' } },
-          other ? h('a', { class: 'btn primary', href: `#/kontrola/${other.id}` }, `Zkontrolovat i ${other.typ === 'CH' ? 'chlapce' : 'dívky'}`) : null,
+          pairButton(other),
           h('a', { class: 'btn', href: '#/kontrola' }, 'Seznam toalet'))));
+  }
+
+  function pairButton(other) {
+    return h('a', { class: 'btn primary', href: `#/kontrola/${other.id}?par=1` },
+      wcBadge(other, 'plain', 'sm'), `Zkontrolovat i ${other.typ === 'CH' ? 'chlapce' : 'dívky'}`);
   }
 
   // ---- formulář škody ----
@@ -189,7 +211,8 @@ async function detail(el, ctx, kod, token) {
   }
 
   // ---- po nahlášení: okno a kdo v něm byl ----
-  function showResult(inc, w) {
+  async function showResult(inc, w) {
+    const other = await pairOffer();
     const visitors = visitsInWindow(data.navstevy, t.id, inc.oknoOd, inc.casNalezu);
     const zMap = new Map(ref.zaci.map((z) => [z.id, z]));
     const names = ctx.canSeeNames(inc.nahlasil);
@@ -212,7 +235,8 @@ async function detail(el, ctx, kod, token) {
         })) : null,
         names && visitors.length ? h('p', { class: 'muted small', style: { marginTop: '10px' } }, 'Být v okně neznamená škodu způsobit. Jména slouží vedení k hledání opakujícího se vzorce.') : null),
       h('div', { class: 'btn-row', style: { marginTop: '18px' } },
-        h('a', { class: 'btn primary', href: '#/kontrola' }, 'Hotovo')));
+        other ? pairButton(other) : null,
+        h('a', { class: other ? 'btn' : 'btn primary', href: '#/kontrola' }, other ? 'Seznam toalet' : 'Hotovo')));
     toast('Škoda nahlášena.');
   }
 }

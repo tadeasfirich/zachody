@@ -5,7 +5,7 @@
 // s desetiminutovou platností, a bez ověření by si prohlížeč po aktualizaci mohl vzít část
 // souborů novou a část starou – aplikace pak hlásí „does not provide an export named …“.
 
-const VERSION = 'zachody-v3';
+const VERSION = 'zachody-v4';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
