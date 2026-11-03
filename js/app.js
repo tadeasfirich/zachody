@@ -197,8 +197,31 @@ async function route() {
     cleanup = await mod.render(content, ctx, r) || null;
   } catch (e) {
     console.error(e);
-    mount(content, h('div', { class: 'box dashed' }, h('b', null, 'Tuhle obrazovku se nepodařilo načíst.'), h('p', null, e.message || String(e))));
+    // Smíchaná stará a nová verze souborů po aktualizaci: jednou automaticky načti vše znovu.
+    if (isStaleModuleError(e) && !sessionStorage.getItem('zachody-hard-reload')) {
+      sessionStorage.setItem('zachody-hard-reload', '1');
+      mount(content, h('p', { class: 'muted' }, 'Načítám novou verzi aplikace…'));
+      await hardReload();
+      return;
+    }
+    mount(content, h('div', { class: 'box dashed' }, h('b', null, 'Tuhle obrazovku se nepodařilo načíst.'), h('p', null, e.message || String(e)),
+      h('button', { class: 'btn', onclick: () => hardReload() }, 'Načíst aplikaci znovu')));
   }
+  sessionStorage.removeItem('zachody-hard-reload');
+}
+
+function isStaleModuleError(e) {
+  return /does not provide an export|Failed to fetch dynamically imported|Importing a module script failed|error loading dynamically imported/i.test(e && e.message || '');
+}
+
+// Smaže mezipaměť aplikace, aktualizuje service worker a načte stránku znovu. Data zůstanou.
+async function hardReload() {
+  try {
+    if ('caches' in window) for (const k of await caches.keys()) await caches.delete(k);
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+    if (reg) await reg.update().catch(() => {});
+  } catch (err) { console.warn(err); }
+  location.reload();
 }
 
 // ---------- hlavička ----------
@@ -256,7 +279,13 @@ function openUserMenu() {
 
 function registerSW() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker', e));
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch((e) => console.warn('Service worker', e));
+    // Nová verze aplikace se nainstalovala: nabídni obnovení (neruší rozepsaný formulář).
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;
+      toast('Je k dispozici nová verze aplikace.', { action: 'Obnovit', timeout: 30000, onAction: () => location.reload() });
+    });
   }
 }
 

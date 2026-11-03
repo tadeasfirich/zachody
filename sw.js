@@ -1,7 +1,11 @@
 // Service worker: aplikace se načte i bez sítě. Data řeší fronta zápisů v aplikaci, ne tady.
 // Při každé nové verzi zvyš číslo VERSION, ať si zařízení stáhnou nové soubory.
+//
+// Vlastní soubory se vždy ověřují u serveru (cache: 'no-cache'). GitHub Pages posílá soubory
+// s desetiminutovou platností, a bez ověření by si prohlížeč po aktualizaci mohl vzít část
+// souborů novou a část starou – aplikace pak hlásí „does not provide an export named …“.
 
-const VERSION = 'zachody-v2';
+const VERSION = 'zachody-v3';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
@@ -12,7 +16,9 @@ const FILES = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION)
+    .then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -29,7 +35,7 @@ self.addEventListener('fetch', (e) => {
 
   // vlastní soubory: nejdřív síť (ať se hned projeví nová verze), při výpadku mezipaměť
   if (url.origin === location.origin) {
-    e.respondWith(fetch(req).then((res) => {
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || caches.match('index.html'))));
