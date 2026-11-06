@@ -30,7 +30,8 @@ Co jsem při stavbě rozhodl sám, proč a jak to změnit.
 
 | **Rozvrh učeben** (seznam `Rozvrh`): učebna × den × hodina → třídy / volno / nevyplněno. Hodina na tabletu se podle něj spustí sama | Zadání z 6. 11.: primárně se jede podle rozvrhu, změnu zadá učitel. | Správa → Rozvrh učeben |
 | **Učitel opraví třídu kdykoli během hodiny** („Jiná třída“), hodina zůstane stejná (stejné ID), takže zapsané odchody se neztratí | Učitelé zapomínají nebo to řeší až v průběhu hodiny. Žáci se zapisují pod svým jménem, takže změna třídy jejich záznamy nepokazí. | `changeRelace()` v `trida.js` |
-| **Připomínka na tabletu** prvních 10 minut hodiny spuštěné podle rozvrhu („Je tu opravdu 8.A?“) | Aby si učitel změny všiml, i když na tablet nesahá. | `trida.js` |
+| **Bez připomínky „Je tu opravdu 8.A?“** – stačí trvale viditelné tlačítko „Jiná třída“ | Pruh byl moc výrazný a nabádal žáky klikat (zpětná vazba 6. 11.). | `trida.js` |
+| **Nastavení tabletu** je nenápadné kolečko vpravo nahoře, otevře se až po podržení 2 s | Žáci ho neotevřou náhodou; je tam ukončení hodiny, výjimka „pustit dalšího žáka“, odhlášení tabletu, u správce změna učebny. | `trida.js` → `openSettings()` |
 | **Změnu třídy chrání PIN učebny**, pokud je nastavený | Ať třídu nepřepínají žáci. | Číselníky → Učebny a tablety |
 | **Změny od učitelů** (14 dní) jsou vidět u rozvrhu a jdou převzít jedním tlačítkem | Rozvrh se tak sám zpřesňuje podle skutečnosti. | Správa → Rozvrh učeben |
 | **Rozvrh smí upravovat i vedení** | Zadání z 6. 11. | `PAGES` v `sprava.js` |

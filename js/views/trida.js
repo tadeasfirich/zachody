@@ -27,7 +27,6 @@ export async function render(el, ctx) {
   let timer = null, clockEl = null, lastKey = null, lastSig = 0;
   // Ručně otevřená obrazovka (výběr třídy) zůstane, dokud se nezmění stav (konec hodiny, přestávky…).
   let pinned = null;
-  let remindEl = null;
 
   // ---- která učebna ----
   let roomId = user.role === 'ucebna' ? user.ucebna : localStorage.getItem(ADMIN_ROOM_KEY);
@@ -71,7 +70,6 @@ export async function render(el, ctx) {
     if (force || key !== lastKey) { pinned = null; lastKey = key; draw(now); }
     else if (key.startsWith('main')) {
       drawOutStrip(now);
-      if (remindEl && st.relace && (now - new Date(st.relace.zacatek)) / 60000 >= 10) { remindEl.remove(); remindEl = null; }
     }
   }
 
@@ -188,8 +186,9 @@ export async function render(el, ctx) {
   // ---------- obrazovky ----------
   function header(now, title, eyebrow, action) {
     clockEl = h('div', { class: 't-clock', 'aria-label': 'Čas' }, fmt.time(now));
-    const gear = h('button', { class: 'gear', 'aria-label': 'Nastavení tabletu – podrž 2 sekundy' },
-      h('span', { class: 'ring' }), h('span', { class: 'hint' }, 'podrž'));
+    // Nastavení tabletu pro učitele/správce: otevře se až po podržení 2 s, ať ho žáci náhodou neotevřou.
+    const gear = h('button', { class: 'gear', 'aria-label': 'Nastavení tabletu (podržet 2 sekundy)', title: 'Nastavení tabletu – podržet 2 s' },
+      h('span', { class: 'ring' }));
     longPress(gear, 2000, openSettings);
     return h('div', { class: 't-head' },
       h('div', null, h('div', { class: 'eyebrow' }, eyebrow), h('h1', { class: 'title' }, title)),
@@ -330,15 +329,9 @@ export async function render(el, ctx) {
       mount(results, hits.length ? hits.map((z) => studentTile(z, true)) : h('p', { class: 'muted' }, 'Nikoho takového nevidím.'));
     });
 
-    // Prvních 10 minut hodiny spuštěné podle rozvrhu připomeneme učiteli, ať třídu zkontroluje.
-    const lessonMin = (now - new Date(rel.zacatek)) / 60000;
-    const remind = rel.puvod === 'rozvrh' && lessonMin < 10;
     const sub = `${r.nazev} – ${rel.hodina === 'mimo' ? 'mimořádná hodina' : `${rel.hodina}. hodina`}${rel.puvod === 'rozvrh' ? ' – podle rozvrhu' : ''}${rel.puvod === 'zmena' ? ' – změněno učitelem' : ''}`;
     mount(el,
       header(now, title, sub, h('button', { class: 'btn change-btn', onclick: askChange }, 'Jiná třída')),
-      remindEl = remind ? h('div', { class: 'rozvrh-check' },
-        h('span', null, 'Je tu opravdu ', h('b', null, title), '? Pokud učíte jinou třídu, ťukněte na ', h('b', null, 'Jiná třída'), ' – klidně i v průběhu hodiny.'),
-        h('button', { class: 'btn small', onclick: askChange }, 'Jiná třída')) : null,
       outStripEl,
       gridWrap,
       h('hr', { class: 'rule-thin' }),
