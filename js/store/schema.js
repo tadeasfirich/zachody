@@ -23,6 +23,11 @@ export const KINDS = {
     ['ucitel', 'Ucitel', 'text'], ['jmeno', 'Jmeno', 'text']] },
   rozpisKontrol: { list: 'RozpisKontrol', ref: true, fields: [
     ['prestavka', 'Prestavka', 'number'], ['typ', 'TypSlotu', 'text'], ['rezim', 'Rezim', 'text']] },
+  // Rozvrh učeben: kdo má v které učebně kterou hodinu. Tablet podle něj sám spustí hodinu.
+  // tridy prázdné + volno = podle rozvrhu se neučí; řádek chybí = učitel vybere třídu sám.
+  rozvrh: { list: 'Rozvrh', ref: true, fields: [
+    ['ucebna', 'Ucebna', 'text', true], ['den', 'DenTydne', 'number'], ['hodina', 'Hodina', 'number'],
+    ['tridy', 'Tridy', 'list'], ['volno', 'Volno', 'boolean']] },
   dnyBezProvozu: { list: 'DnyBezProvozu', ref: true, fields: [
     ['datum', 'Datum', 'text'], ['duvod', 'Duvod', 'text']] },
   zvysenyDohled: { list: 'ZvysenyDohled', ref: true, fields: [
@@ -32,7 +37,9 @@ export const KINDS = {
   // události (zapisují tablety, učitelé, úklid)
   relace: { list: 'Relace', time: 'zacatek', fields: [
     ['ucebna', 'Ucebna', 'text'], ['tridy', 'Tridy', 'list'], ['hodina', 'Hodina', 'text'],
-    ['zacatek', 'Zacatek', 'dateTime', true], ['konec', 'Konec', 'dateTime'], ['spustil', 'Spustil', 'text']] },
+    ['zacatek', 'Zacatek', 'dateTime', true], ['konec', 'Konec', 'dateTime'], ['spustil', 'Spustil', 'text'],
+    // puvod: rozvrh (spustil se sám), ucitel (vybral učitel), zmena (učitel opravil rozvrh během hodiny)
+    ['puvod', 'Puvod', 'text'], ['rozvrhTridy', 'RozvrhTridy', 'list'], ['zmenil', 'Zmenil', 'text'], ['zmenaCas', 'ZmenaCas', 'dateTime']] },
   navstevy: { list: 'Navstevy', time: 'casOd', fields: [
     ['zak', 'Zak', 'text', true], ['toaleta', 'Toaleta', 'text', true], ['casOd', 'CasOd', 'dateTime', true],
     ['casDo', 'CasDo', 'dateTime'], ['zdroj', 'Zdroj', 'text'], ['ucebna', 'Ucebna', 'text'],
@@ -91,7 +98,7 @@ export function defaultRef() {
   }
   return {
     toalety, zvoneni, rozpisKontrol,
-    ucebny: [], tridy: [], zaci: [], planDozoru: [], dnyBezProvozu: [], zvysenyDohled: [],
+    ucebny: [], tridy: [], zaci: [], planDozoru: [], dnyBezProvozu: [], zvysenyDohled: [], rozvrh: [],
     nastaveni: defaultSettings(),
   };
 }
@@ -104,6 +111,8 @@ export function defaultSettings() {
     toleranceMin: 5,
     jmenaVidiUklid: false,
     jmenaVidiUcitel: true,
+    // Fáze 1 (jen tablety): upozornění na vynechané kontroly a nové škody se neposílají.
+    upozorneni: false,
   };
 }
 
@@ -115,6 +124,8 @@ export function randomToken() {
 
 // Šablona slotů pro Power Automate: den × přestávka × toaleta, časy jako „HH:MM“.
 export function buildSlotTemplate(ref) {
+  // Upozornění vypnutá = žádné sloty, Power Automate nemá co hlídat.
+  if (!ref.nastaveni || !ref.nastaveni.upozorneni) return [];
   const tol = Number(ref.nastaveni.toleranceMin ?? 5);
   const out = [];
   const br = breaks(ref.zvoneni);
@@ -134,4 +145,15 @@ export function buildSlotTemplate(ref) {
     }
   }
   return out;
+}
+
+// Položka rozvrhu pro učebnu, den (1 = po) a hodinu. null = nevyplněno.
+export function rozvrhFor(ref, ucebna, den, hodina) {
+  return (ref.rozvrh || []).find((r) => r.ucebna === ucebna && Number(r.den) === Number(den) && Number(r.hodina) === Number(hodina)) || null;
+}
+
+export function rozvrhLabel(e) {
+  if (!e) return '';
+  if (e.volno) return 'volno';
+  return (e.tridy || []).join(' + ');
 }

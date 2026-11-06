@@ -2,6 +2,10 @@
 
 Aplikace pro ZŠ Karla Hašlera Libčice proti ničení školních toalet. Tablety ve třídách zapisují, kdo odešel na toaletu, dozory a úklid zapisují stav toalet. Když se najde škoda, aplikace ukáže, kdo tam byl od poslední kontroly.
 
+## Fáze 1: jen tablety
+
+Nejdřív se aplikace používá hlavně na tabletech ve třídách. Kontroly toalet a hlášení škod fungují, ale **upozornění se neposílají** (Správa → Číselníky a pravidla → Obecné → „Posílat upozornění“ je vypnuté). Zapne se ve fázi 2.
+
 ## Teď: testovací verze
 
 **Spuštění:** `https://tadeasfirich.github.io/zachody/` (po zapnutí GitHub Pages: Settings → Pages → Branch `main`, složka `/ (root)`).
@@ -42,15 +46,17 @@ Přihlášení: tlačítko **Přihlásit přes Microsoft**, školní účet. Co 
 
 ## Učitel v hodině (tablet ve třídě)
 
-1. **Na začátku hodiny** ukáže tablet „Kdo tu teď je?“. Ťukni svou třídu, u spojených seminářů obě. Pak **Začít hodinu**.
-   Když tu hodinu učíš stejně jako minulý týden, stačí **Stejná jako minule**.
+1. **Hodina se spustí sama podle rozvrhu.** Nahoře je velký název třídy (např. „8.A“).
+   **Učíš jinou třídu?** Ťukni **Jiná třída** a vyber, kdo tu opravdu je. Jde to kdykoli během hodiny – co už žáci zapsali, zůstane.
+   Když učebna rozvrh nemá, tablet ukáže „Kdo tu teď je?“ a třídu vybereš sám.
 2. Žák, který jde na toaletu, **ťukne své jméno → Jdu**. Toaleta se vybere sama podle patra.
 3. Když se vrátí, ťukne znovu (nebo na černý pruh nahoře) → **Jsem zpět**.
 4. Venku smí být **jen jeden žák**. Výjimku povolíš ťuknutím na „Učitel povoluje výjimku“.
 5. Zapomenutý návrat se po 10 minutách uzavře sám.
 
-Nastavení tabletu (jiná třída, konec hodiny) je pod kolečkem vpravo nahoře – **podrž 2 sekundy**.
-Žák z jiné třídy (suplování, seminář) se najde dole podle příjmení.
+Když podle rozvrhu učebna nemá hodinu, tablet ukáže „Volná hodina“. Přišel jsi sem přesto? **Přece jen tu někdo je**.
+Nastavení tabletu (konec hodiny, odhlášení) je pod kolečkem vpravo nahoře – **podrž 2 sekundy**.
+Žák, který v seznamu chybí (suplování, seminář), se najde dole: **Nejsi v seznamu? Najdi se podle příjmení.**
 
 ---
 
@@ -86,6 +92,7 @@ Nahoře se přepínáš mezi **Tablet ve třídě**, **Dozor a kontrola** a **Sp
 - **Incidenty** – detail škody, fotky, kdo byl v okně, změna stavu, tisk bez jmen pro jednání s rodiči, zapnutí zvýšeného dohledu.
 - **Analýza překryvu** – kdo se opakovaně objevuje v oknech víc, než by odpovídalo tomu, jak často na toaletu chodí. **Je to vodítko, ne důkaz** – vždy nejdřív rozhovor se žákem a postup podle školního řádu.
 - **Plnění kontrol** – kolik povinných kontrol proběhlo, po dozorech.
+- **Rozvrh učeben** – kdo má v které učebně kterou hodinu (správce i vedení). Políčko: třída (hodina se spustí sama), volno, nebo nevyplněno (vybere učitel). Dole jsou **změny od učitelů** – když se opakují, jedním tlačítkem je převezmeš do rozvrhu.
 - **Statistiky**, **QR štítky** a u správce i **Žáci a import**, **Číselníky a pravidla**, **Data a uchování**.
 
 ---

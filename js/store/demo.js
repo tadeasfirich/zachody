@@ -5,7 +5,7 @@
 // (třeba tablet a telefon vedle sebe), změna v jedné se přes BroadcastChannel hned projeví v ostatních.
 
 import { idb } from './idb.js';
-import { generateDemo } from './demo-data.js';
+import { generateDemo, demoRozvrh } from './demo-data.js';
 import { EVENT_KINDS, KINDS, buildSlotTemplate } from './schema.js';
 
 const KEY = 'demo-db-v1';
@@ -26,7 +26,9 @@ export class DemoStore {
 
   async init() {
     this.db = await idb.get('kv', KEY);
-    if (!this.db) await this.reset();
+    if (!this.db) { await this.reset(); return; }
+    // starší testovací data (před přidáním rozvrhu) doplníme, ať nemusíš nic mazat
+    if (!this.db.ref.rozvrh) await this._mutate(['ref', 'rozvrh'], (db) => { db.ref.rozvrh = demoRozvrh(db.ref); });
   }
 
   // ---------- synchronizace mezi záložkami ----------

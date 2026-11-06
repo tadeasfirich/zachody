@@ -2,13 +2,14 @@
 
 import { h, mount, mark, modal, toast, fmt, uid, normalize, confirmDialog, downloadText, toCsv, studentName } from '../ui.js';
 import { CONFIG, appUrl } from '../config.js';
-import { PATRA, TYP_WC, KATEGORIE, randomToken, defaultSettings } from '../store/schema.js';
-import { breaks, hmStr, startOfDay, addDays, dateKey } from '../time.js';
+import { PATRA, TYP_WC, KATEGORIE, randomToken, defaultSettings, rozvrhFor, rozvrhLabel } from '../store/schema.js';
+import { breaks, lessons, hmStr, startOfDay, addDays, dateKey, isoDay } from '../time.js';
 import { incidentVisitors } from '../logic.js';
 import { wcBadge } from '../wc.js';
 import { loadRange } from '../data.js';
 
 export async function render(el, ctx, page, r) {
+  if (page === 'rozvrh') return rozvrh(el, ctx, r);
   if (page === 'zaci') return zaci(el, ctx, r);
   if (page === 'nastaveni') return nastaveni(el, ctx, r);
   if (page === 'qr') return qr(el, ctx);
@@ -344,6 +345,8 @@ async function nastaveni(el, ctx, r) {
       f('retenceDni', 'Uchovávat odchody žáků (dní)', 'number', 'Odchody, které nepatří k žádnému incidentu, se po této době mažou.'),
       f('jmenaVidiUcitel', 'Učitel, který škodu nahlásil, vidí jména žáků v okně', 'checkbox'),
       f('jmenaVidiUklid', 'Uklízečka vidí jména žáků v okně (jinak jen počet)', 'checkbox'),
+      f('upozorneni', 'Posílat upozornění vedení a dozorům (vynechané kontroly, nové škody)', 'checkbox',
+        'Ve fázi 1 (aplikace jen na tabletech) nech vypnuté. Kontroly a hlášení škod fungují dál, jen se nikomu nic neposílá.'),
       h('button', { class: 'btn primary', onclick: async () => { await save(ctx, 'nastaveni', s); reload(); } }, 'Uložit')));
   }
 }
@@ -505,3 +508,148 @@ async function instalace(el, ctx) {
     h('p', { class: 'muted small' }, 'Při prvním spuštění se Microsoft zeptá na oprávnění „Sites.Manage.All“ – je potřeba jen pro tento krok.'));
 }
 
+
+// ================= ROZVRH UČEBEN =================
+// Podle rozvrhu tablet v učebně sám spustí hodinu se správnou třídou. Učitel to na tabletu
+// kdykoli opraví („Jiná třída“). Změny od učitelů jsou vidět dole a jde je převzít do rozvrhu.
+const DNY = ['', 'Po', 'Út', 'St', 'Čt', 'Pá'];
+const DNY_DLOUHE = ['', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek'];
+
+async function rozvrh(el, ctx, r) {
+  const ref = ctx.ref;
+  const rooms = [...ref.ucebny].filter((u) => u.aktivni !== false)
+    .sort((a, b) => Number(a.patro) - Number(b.patro) || a.nazev.localeCompare(b.nazev, 'cs'));
+  if (!rooms.length) {
+    mount(el, ...H('Nastavení', 'Rozvrh učeben'), h('p', null, 'Nejdřív založ učebny v Číselníky a pravidla → Učebny a tablety.'));
+    return;
+  }
+  const roomId = rooms.some((u) => u.id === r.query.get('u')) ? r.query.get('u') : rooms[0].id;
+  const room = rooms.find((u) => u.id === roomId);
+  const L = lessons(ref.zvoneni);
+  const tridy = ref.tridy.filter((t) => t.aktivni !== false).sort((a, b) => a.nazev.localeCompare(b.nazev, 'cs'));
+  const go = (u) => ctx.navigate(`#/sprava/rozvrh?u=${encodeURIComponent(u)}`);
+
+  // uloží jednu buňku (null = nevyplněno)
+  async function setCell(den, hodina, value) {
+    const id = `${roomId}|${den}|${hodina}`;
+    const list = (ctx.ref.rozvrh || []).filter((x) => x.id !== id);
+    if (value) list.push({ id, ucebna: roomId, den, hodina, tridy: value.tridy || [], volno: !!value.volno });
+    return save(ctx, 'rozvrh', list, 'Rozvrh uložen.');
+  }
+
+  function editCell(den, hodina) {
+    const cur = rozvrhFor(ctx.ref, roomId, den, hodina);
+    const sel = new Set(cur && !cur.volno ? cur.tridy : []);
+    modal((close) => {
+      const tiles = tridy.map((t) => {
+        const b = h('button', { class: 'class-tile', 'aria-pressed': String(sel.has(t.nazev)), style: { minHeight: '64px', fontSize: '22px' }, onclick: () => {
+          if (sel.has(t.nazev)) sel.delete(t.nazev); else sel.add(t.nazev);
+          b.setAttribute('aria-pressed', String(sel.has(t.nazev)));
+          okBtn.disabled = !sel.size;
+          okBtn.textContent = sel.size ? `Uložit – ${[...sel].join(' + ')}` : 'Vyber třídu';
+        } }, t.nazev);
+        return b;
+      });
+      const okBtn = h('button', { class: 'btn primary', disabled: !sel.size || null, onclick: async () => { if (await setCell(den, hodina, { tridy: [...sel] })) { close(); go(roomId); } } },
+        sel.size ? `Uložit – ${[...sel].join(' + ')}` : 'Vyber třídu');
+      const l = L.find((x) => x.hodina === hodina);
+      return [
+        h('div', { class: 'eyebrow' }, `${room.nazev} – ${DNY_DLOUHE[den]}`),
+        h('h2', { class: 'title' }, `${hodina}. hodina${l ? ` (${hmStr(l.od)}–${hmStr(l.do)})` : ''}`),
+        h('p', { class: 'muted' }, 'Vyber třídu, u spojených hodin (semináře) víc tříd.'),
+        h('hr', { class: 'rule' }),
+        h('div', { class: 'class-grid', style: { gridTemplateColumns: 'repeat(auto-fill, minmax(86px, 1fr))' } }, tiles),
+        h('div', { class: 'btn-row', style: { marginTop: '16px' } },
+          okBtn,
+          h('button', { class: 'btn', onclick: async () => { if (await setCell(den, hodina, { volno: true })) { close(); go(roomId); } } }, 'Volno – neučí se tu'),
+          h('button', { class: 'btn ghost', onclick: async () => { if (await setCell(den, hodina, null)) { close(); go(roomId); } } }, 'Nevyplněno – vybere učitel'),
+          h('button', { class: 'btn ghost', onclick: close }, 'Zrušit')),
+      ];
+    }, { wide: true });
+  }
+
+  const cell = (den, l) => {
+    const e = rozvrhFor(ref, roomId, den, l.hodina);
+    const cls = e ? (e.volno ? 'rz-cell volno' : 'rz-cell set') : 'rz-cell empty';
+    return h('td', null, h('button', { class: cls, onclick: () => editCell(den, l.hodina), 'aria-label': `${DNY_DLOUHE[den]} ${l.hodina}. hodina: ${e ? rozvrhLabel(e) : 'nevyplněno'}` },
+      e ? rozvrhLabel(e) : '–'));
+  };
+
+  // nástroje
+  const home = tridy.find((t) => room.nazev.replace(/\s/g, '').endsWith(t.nazev)) || null;
+  const fillSel = h('select', null, tridy.map((t) => h('option', { value: t.nazev, selected: home && home.nazev === t.nazev || null }, t.nazev)));
+  const fillCount = h('select', null, L.map((l) => h('option', { value: l.hodina, selected: l.hodina === Math.min(6, L.length) || null }, `1.–${l.hodina}. hodina`)));
+  const roomSel = h('select', { onchange: (e) => go(e.target.value) },
+    [0, 1, 2].map((p) => h('optgroup', { label: PATRA[p] }, rooms.filter((u) => Number(u.patro) === p).map((u) => h('option', { value: u.id, selected: u.id === roomId || null }, u.nazev)))));
+  const filled = (ref.rozvrh || []).filter((x) => x.ucebna === roomId).length;
+
+  // změny od učitelů za 14 dní: hodiny, kde učitel třídu změnil nebo vybral jinou než rozvrh
+  const now = new Date();
+  const rel = (await loadRange(ctx, { from: addDays(startOfDay(now), -13), to: now, kinds: ['relace'] })).relace
+    .filter((x) => x.ucebna === roomId && x.hodina !== 'mimo');
+  const diffs = rel.filter((x) => {
+    const e = rozvrhFor(ref, roomId, isoDay(x.zacatek), Number(x.hodina));
+    const want = e && !e.volno ? [...e.tridy].sort().join('+') : '';
+    return x.puvod === 'zmena' || (x.puvod === 'ucitel' && [...(x.tridy || [])].sort().join('+') !== want);
+  }).sort((a, b) => new Date(b.zacatek) - new Date(a.zacatek));
+
+  mount(el,
+    ...H('Nastavení', 'Rozvrh učeben', 'Podle rozvrhu tablet na začátku hodiny sám spustí hodinu se správnou třídou. Když tam je jiná třída, učitel ji na tabletu opraví tlačítkem „Jiná třída“ – i v průběhu hodiny.'),
+    h('div', { class: 'filters' },
+      h('label', { class: 'field', style: { minWidth: '240px' } }, h('span', null, 'Učebna'), roomSel),
+      h('p', { class: 'muted small', style: { margin: '0 0 10px' } }, `${filled} ${filled === 1 ? 'vyplněná hodina' : (filled >= 2 && filled <= 4) ? 'vyplněné hodiny' : 'vyplněných hodin'}`)),
+    h('div', { class: 'table-wrap' }, h('table', { class: 'rz' },
+      h('thead', null, h('tr', null, h('th', null, 'Hodina'), [1, 2, 3, 4, 5].map((d) => h('th', null, DNY[d])))),
+      h('tbody', null, L.map((l) => h('tr', null,
+        h('th', { class: 'rz-h' }, h('b', null, `${l.hodina}.`), h('span', null, `${hmStr(l.od)}–${hmStr(l.do)}`)),
+        [1, 2, 3, 4, 5].map((d) => cell(d, l))))))),
+    h('div', { class: 'legend', style: { marginTop: '10px' } },
+      h('span', null, h('span', { class: 'rz-key set' }), 'třída – hodina se spustí sama'),
+      h('span', null, h('span', { class: 'rz-key volno' }), 'volno – tablet nic nezapisuje'),
+      h('span', null, h('span', { class: 'rz-key empty' }), 'nevyplněno – třídu vybere učitel')),
+
+    h('hr', { class: 'rule-thin' }),
+    h('div', { class: 'box fill' },
+      h('h4', null, 'Rychlé vyplnění'),
+      h('div', { class: 'filters', style: { marginBottom: '0' } },
+        h('label', { class: 'field' }, h('span', null, 'Třída'), fillSel),
+        h('label', { class: 'field' }, h('span', null, 'Každý den'), fillCount),
+        h('button', { class: 'btn', onclick: async () => {
+          const max = Number(fillCount.value);
+          const list = [...(ctx.ref.rozvrh || [])];
+          let n = 0;
+          for (let den = 1; den <= 5; den++) for (const l of L.filter((x) => x.hodina <= max)) {
+            const id = `${roomId}|${den}|${l.hodina}`;
+            if (list.some((x) => x.id === id)) continue;
+            list.push({ id, ucebna: roomId, den, hodina: l.hodina, tridy: [fillSel.value], volno: false });
+            n++;
+          }
+          if (!n) { toast('Všechna políčka v rozsahu už jsou vyplněná.'); return; }
+          if (await save(ctx, 'rozvrh', list, `Doplněno ${n} hodin.`)) go(roomId);
+        } }, 'Doplnit prázdná políčka'),
+        h('button', { class: 'btn ghost', onclick: async () => {
+          if (!(await confirmDialog(`Smazat celý rozvrh učebny ${room.nazev}?`, { ok: 'Smazat' }))) return;
+          if (await save(ctx, 'rozvrh', (ctx.ref.rozvrh || []).filter((x) => x.ucebna !== roomId), 'Rozvrh učebny smazán.')) go(roomId);
+        } }, 'Smazat rozvrh učebny')),
+      h('p', { class: 'muted small', style: { margin: '8px 0 0' } }, 'Kmenová učebna: vyber její třídu a doplň. Pak jen uprav hodiny, kdy je třída jinde (volno) nebo kdy sem chodí jiná.')),
+
+    h('hr', { class: 'rule-thin' }),
+    h('h2', { style: { fontSize: '20px', marginBottom: '6px' } }, 'Změny od učitelů (14 dní)'),
+    h('p', { class: 'muted small' }, 'Hodiny, kdy učitel na tabletu zvolil jinou třídu než rozvrh. Když se to opakuje, je rozvrh asi špatně – převezmi změnu.'),
+    diffs.length ? h('div', { class: 'table-wrap' }, h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'Den'), h('th', null, 'Hodina'), h('th', null, 'Rozvrh'), h('th', null, 'Učitel zvolil'), h('th', null, 'Kdy'), h('th', null, ''))),
+      h('tbody', null, diffs.slice(0, 30).map((x) => {
+        const den = isoDay(x.zacatek);
+        const e = rozvrhFor(ref, roomId, den, Number(x.hodina));
+        const chosen = (x.tridy || []).length ? x.tridy.join(' + ') : 'smíšená skupina';
+        return h('tr', null,
+          h('td', { class: 'nowrap' }, `${DNY[den]} ${fmt.date(x.zacatek)}`),
+          h('td', null, `${x.hodina}.`),
+          h('td', null, e ? rozvrhLabel(e) : h('span', { class: 'muted' }, 'nevyplněno')),
+          h('td', null, h('b', null, chosen)),
+          h('td', { class: 'muted small' }, x.puvod === 'zmena' && x.zmenaCas ? `opraveno v ${fmt.time(x.zmenaCas)}` : 'na začátku hodiny'),
+          h('td', null, (x.tridy || []).length ? h('button', { class: 'btn small', onclick: async () => {
+            if (await setCell(den, Number(x.hodina), { tridy: x.tridy })) go(roomId);
+          } }, `Převzít do rozvrhu (${DNY[den]})`) : null));
+      })))) : h('p', { class: 'muted' }, 'Žádné změny – rozvrh sedí.'));
+}

@@ -28,7 +28,17 @@ Co jsem při stavbě rozhodl sám, proč a jak to změnit.
 | **Knihovny z CDN** (MSAL, QR, SheetJS) přes jsdelivr `+esm` | Bez build kroku; service worker si je uloží pro práci offline. | `config.js` → `cdn` |
 | **Notifikace přes Power Automate** (e-mail + Teams Flow bot), ne web push | Web push potřebuje vlastní server; Teams na telefonu doručí push bez něj. | Verze 2: Azure Function + VAPID |
 
+| **Rozvrh učeben** (seznam `Rozvrh`): učebna × den × hodina → třídy / volno / nevyplněno. Hodina na tabletu se podle něj spustí sama | Zadání z 6. 11.: primárně se jede podle rozvrhu, změnu zadá učitel. | Správa → Rozvrh učeben |
+| **Učitel opraví třídu kdykoli během hodiny** („Jiná třída“), hodina zůstane stejná (stejné ID), takže zapsané odchody se neztratí | Učitelé zapomínají nebo to řeší až v průběhu hodiny. Žáci se zapisují pod svým jménem, takže změna třídy jejich záznamy nepokazí. | `changeRelace()` v `trida.js` |
+| **Připomínka na tabletu** prvních 10 minut hodiny spuštěné podle rozvrhu („Je tu opravdu 8.A?“) | Aby si učitel změny všiml, i když na tablet nesahá. | `trida.js` |
+| **Změnu třídy chrání PIN učebny**, pokud je nastavený | Ať třídu nepřepínají žáci. | Číselníky → Učebny a tablety |
+| **Změny od učitelů** (14 dní) jsou vidět u rozvrhu a jdou převzít jedním tlačítkem | Rozvrh se tak sám zpřesňuje podle skutečnosti. | Správa → Rozvrh učeben |
+| **Rozvrh smí upravovat i vedení** | Zadání z 6. 11. | `PAGES` v `sprava.js` |
+| **Fáze 1: upozornění vypnutá** (`Nastaveni.upozorneni = false`). Kontroly a hlášení škod fungují, `SlotyKontrol` je prázdný a tok nových incidentů má podmínku | Zadání z 6. 11.: primárně tablety, notifikace by neměly smysl. | Správa → Číselníky a pravidla → Obecné |
+
 ## Pro verzi 2
+
+- Rozvrh pro lichý a sudý týden (pokud ho škola má).
 
 - `Sites.Selected` místo `Sites.ReadWrite.All` – aplikace pak smí jen na web Záchody (nastavuje se přes Graph `POST /sites/{id}/permissions`).
 - Web push přímo z PWA (malá Azure Function).

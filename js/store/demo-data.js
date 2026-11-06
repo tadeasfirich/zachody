@@ -37,6 +37,35 @@ const M_FIRST = ['Adam', 'Jakub', 'Jan', 'Tomáš', 'Matyáš', 'Vojtěch', 'Fil
 const F_FIRST = ['Eliška', 'Anna', 'Tereza', 'Adéla', 'Natálie', 'Sofie', 'Karolína', 'Viktorie', 'Kristýna', 'Barbora', 'Klára', 'Ema', 'Nela', 'Julie', 'Lucie', 'Amálie', 'Rozálie', 'Veronika', 'Markéta', 'Zuzana', 'Laura', 'Michaela', 'Sára', 'Linda'];
 const SURN = [['Novák', 'Nováková'], ['Svoboda', 'Svobodová'], ['Novotný', 'Novotná'], ['Dvořák', 'Dvořáková'], ['Černý', 'Černá'], ['Procházka', 'Procházková'], ['Kučera', 'Kučerová'], ['Veselý', 'Veselá'], ['Horák', 'Horáková'], ['Němec', 'Němcová'], ['Marek', 'Marková'], ['Pospíšil', 'Pospíšilová'], ['Hájek', 'Hájková'], ['Jelínek', 'Jelínková'], ['Král', 'Králová'], ['Růžička', 'Růžičková'], ['Beneš', 'Benešová'], ['Fiala', 'Fialová'], ['Sedláček', 'Sedláčková'], ['Doležal', 'Doležalová'], ['Zeman', 'Zemanová'], ['Kolář', 'Kolářová'], ['Navrátil', 'Navrátilová'], ['Čermák', 'Čermáková'], ['Urban', 'Urbanová'], ['Vaněk', 'Vaňková'], ['Blažek', 'Blažková'], ['Kříž', 'Křížová'], ['Kovář', 'Kovářová'], ['Bartoš', 'Bartošová'], ['Vlček', 'Vlčková'], ['Polák', 'Poláková'], ['Musil', 'Musilová'], ['Kopecký', 'Kopecká'], ['Šimek', 'Šimková'], ['Konečný', 'Konečná'], ['Malý', 'Malá'], ['Holub', 'Holubová'], ['Štěpánek', 'Štěpánková'], ['Kadlec', 'Kadlecová']];
 
+const lessonsFor = (rocnik, wd) => (rocnik <= 2 ? 4 : rocnik <= 5 ? 5 : rocnik <= 7 ? 6 : (wd === 2 || wd === 4 ? 7 : 6));
+
+// Ukázkový rozvrh: kmenové učebny mají svou třídu, út a čt 5. hodinu je seminář 8.A + 8.B v učebně 8.A
+// (učebna 8.B má volno). IT učebna má pár hodin, jazyková učebna je nevyplněná (učitel vybírá sám).
+export function demoRozvrh(ref) {
+  const out = [];
+  const add = (ucebna, den, hodina, tridy, volno = false) => {
+    const id = `${ucebna}|${den}|${hodina}`;
+    const i = out.findIndex((x) => x.id === id);
+    const row = { id, ucebna, den, hodina, tridy, volno };
+    if (i >= 0) out[i] = row; else out.push(row);
+  };
+  for (const t of ref.tridy) {
+    const room = `u-${t.nazev.replace('.', '')}`;
+    if (!ref.ucebny.some((u) => u.id === room)) continue;
+    for (let den = 1; den <= 5; den++) {
+      for (let hod = 1; hod <= lessonsFor(t.rocnik, den); hod++) add(room, den, hod, [t.nazev]);
+    }
+  }
+  for (const den of [2, 4]) { add('u-8A', den, 5, ['8.A', '8.B']); add('u-8B', den, 5, [], true); }
+  if (ref.ucebny.some((u) => u.id === 'u-IT')) {
+    for (const [den, hod, tr] of [[1, 3, '6.A'], [2, 2, '7.B'], [3, 4, '8.A'], [4, 3, '9.B'], [5, 1, '5.A'], [5, 2, '6.B']]) {
+      add('u-IT', den, hod, [tr]);
+      add(`u-${tr.replace('.', '')}`, den, hod, [], true);
+    }
+  }
+  return out;
+}
+
 const CLASS_NAMES = ['1.A', '1.B', '2.A', '2.B', '3.A', '3.B', '4.A', '4.B', '5.A', '5.B', '6.A', '6.B', '6.C', '7.A', '7.B', '8.A', '8.B', '9.A', '9.B'];
 const floorOf = (rocnik) => (rocnik <= 3 ? 0 : rocnik <= 6 ? 1 : 2);
 
@@ -128,7 +157,7 @@ export function generateDemo(now = new Date()) {
 
   const L = lessons(ref.zvoneni);
   const BR = breaks(ref.zvoneni);
-  const lessonsFor = (rocnik, wd) => (rocnik <= 2 ? 4 : rocnik <= 5 ? 5 : rocnik <= 7 ? 6 : (wd === 2 || wd === 4 ? 7 : 6));
+  ref.rozvrh = demoRozvrh(ref);
   const roomOfClass = (tr) => `u-${tr.replace('.', '')}`;
   const roomFloor = new Map(ref.ucebny.map((u) => [u.id, u.patro]));
   const roomEmail = new Map(ref.ucebny.map((u) => [u.id, u.ucet]));
@@ -177,7 +206,7 @@ export function generateDemo(now = new Date()) {
         relace.push({
           id: relId, ucebna: g.room, tridy: g.tridy, hodina: String(l.hodina),
           zacatek: atMin(day, l.od + 1).toISOString(), konec: atMin(day, l.do).toISOString(),
-          spustil: pick(visitorsTeachers).email,
+          spustil: pick(visitorsTeachers).email, puvod: 'rozvrh', rozvrhTridy: g.tridy, zmenil: '', zmenaCas: null,
         });
         const floor = roomFloor.get(g.room);
         const kids = zaci.filter((z) => g.tridy.includes(z.trida));

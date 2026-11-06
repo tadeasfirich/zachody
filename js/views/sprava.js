@@ -15,7 +15,8 @@ const PAGES = [
   ['analyza', 'Analýza překryvu', 'all'],
   ['plneni', 'Plnění kontrol', 'all'],
   ['statistiky', 'Statistiky', 'all'],
-  ['-', 'Nastavení', 'spravce'],
+  ['-', 'Nastavení', 'all'],
+  ['rozvrh', 'Rozvrh učeben', 'all'],
   ['zaci', 'Žáci a import', 'spravce'],
   ['nastaveni', 'Číselníky a pravidla', 'spravce'],
   ['qr', 'QR štítky na dveře', 'all'],
@@ -35,7 +36,7 @@ export async function render(el, ctx, r) {
   const allowed = visible.some(([k]) => k === page);
   if (!allowed) { mount(main, h('p', null, 'Tahle část je jen pro správce.')); return; }
 
-  if (['zaci', 'nastaveni', 'qr', 'data', 'instalace'].includes(page)) {
+  if (['rozvrh', 'zaci', 'nastaveni', 'qr', 'data', 'instalace'].includes(page)) {
     const mod = await import('./sprava-nastaveni.js');
     return mod.render(main, ctx, page, r);
   }
@@ -82,6 +83,8 @@ async function prehled(el, ctx) {
 
   mount(el,
     ...H(`${fmt.day(now)} ${fmt.dateY(now)}`, 'Přehled'),
+    ref.nastaveni.upozorneni ? null : h('p', { class: 'phase-note', style: { marginBottom: '14px' } },
+      'Upozornění jsou vypnutá (fáze 1 – jen tablety). Zapnout: Číselníky a pravidla → Obecné.'),
     h('div', { class: 'kpis' },
       kpi(last7.length, `škod za 7 dní (týden předtím ${prev7.length})`),
       kpi(open.length, 'otevřených incidentů'),

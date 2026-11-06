@@ -1,9 +1,12 @@
-// Tablet ve třídě: výběr třídy na začátku hodiny, odchody a návraty žáků.
+// Tablet ve třídě: odchody a návraty žáků.
+// Hodina se spustí sama podle rozvrhu učebny (Správa → Rozvrh učeben). Když tam je jiná třída,
+// učitel ji kdykoli během hodiny opraví tlačítkem „Jiná třída“ – zápisy z hodiny zůstanou.
+// Bez rozvrhu tablet na začátku hodiny ukáže výběr třídy.
 // Stav tabletu (kdo je venku, jaká hodina běží) se drží v zařízení, aby fungoval i bez sítě.
 
 import { h, mount, mark, modal, toast, longPress, uid, fmt, studentName, promptDialog, normalize } from '../ui.js';
 import { period, dateKey, isoDay, isSchoolDay, atMin } from '../time.js';
-import { PATRA } from '../store/schema.js';
+import { PATRA, rozvrhFor, rozvrhLabel } from '../store/schema.js';
 import * as auth from '../auth.js';
 import { wcBadge } from '../wc.js';
 
@@ -22,6 +25,9 @@ export async function render(el, ctx) {
   let st = {};
 
   let timer = null, clockEl = null, lastKey = null, lastSig = 0;
+  // Ručně otevřená obrazovka (výběr třídy) zůstane, dokud se nezmění stav (konec hodiny, přestávky…).
+  let pinned = null;
+  let remindEl = null;
 
   // ---- která učebna ----
   let roomId = user.role === 'ucebna' ? user.ucebna : localStorage.getItem(ADMIN_ROOM_KEY);
@@ -59,9 +65,14 @@ export async function render(el, ctx) {
     if (!force && sig === lastSig) return;
     lastSig = sig;
     autoClose(now);
+    autoStart(now);
     const key = screenKey(now);
-    if (force || key !== lastKey) { lastKey = key; draw(now); }
-    else if (key.startsWith('main')) drawOutStrip(now);
+    if (pinned && !force) { if (key === pinned) return; pinned = null; }
+    if (force || key !== lastKey) { pinned = null; lastKey = key; draw(now); }
+    else if (key.startsWith('main')) {
+      drawOutStrip(now);
+      if (remindEl && st.relace && (now - new Date(st.relace.zacatek)) / 60000 >= 10) { remindEl.remove(); remindEl = null; }
+    }
   }
 
   function currentLesson(now) {
@@ -81,11 +92,64 @@ export async function render(el, ctx) {
     return pp.type === 'break' && String(pp.next.hodina) === String(r.hodina);
   }
 
+  // ---------- rozvrh ----------
+  function scheduled(hodina, now) {
+    if (hodina === 'mimo') return null;
+    return rozvrhFor(ref, roomId, isoDay(now), hodina);
+  }
+  function sameLesson(x, now, hod) { return !!x && x.datum === dateKey(now) && x.hodina === String(hod); }
+
+  // Na začátku hodiny: podle rozvrhu spusť hodinu sám (nebo označ volno).
+  // Neudělá to, když učitel tuhle hodinu rozvrh odmítl (ukončil hodinu, „přece jen tu někdo je“).
+  function autoStart(now) {
+    const p = currentLesson(now);
+    if (!p || relaceActive(now)) return;
+    const hod = p.lesson.hodina;
+    if (sameLesson(st.declined, now, hod) || sameLesson(st.volno, now, hod)) return;
+    const e = scheduled(hod, now);
+    if (!e) return;
+    if (e.volno || !(e.tridy || []).length) {
+      st.volno = { datum: dateKey(now), hodina: String(hod), rozvrh: true };
+      saveState(st);
+      return;
+    }
+    startRelace(e.tridy, hod, 'rozvrh', now);
+  }
+
+  function startRelace(tridy, hodina, puvod, now = new Date()) {
+    const e = scheduled(hodina, now);
+    const rel = {
+      id: uid(), ucebna: roomId, tridy, hodina: String(hodina), zacatek: now.toISOString(), konec: null, spustil: user.email,
+      puvod, rozvrhTridy: e && !e.volno ? e.tridy : [], zmenil: '', zmenaCas: null,
+    };
+    ctx.outbox.add('relace', rel);
+    st.relace = { ...rel, datum: dateKey(now) };
+    st.volno = null;
+    remember(tridy, hodina, now);
+    saveState(st);
+  }
+
+  // Učitel opravil třídu během hodiny: stejná hodina (zápisy zůstanou), jen jiné třídy.
+  function changeRelace(tridy) {
+    const now = new Date();
+    const patch = { tridy, puvod: 'zmena', zmenil: user.email, zmenaCas: now.toISOString() };
+    ctx.outbox.update('relace', st.relace.id, patch);
+    Object.assign(st.relace, patch);
+    remember(tridy, st.relace.hodina, now);
+    saveState(st);
+  }
+
+  function remember(tridy, hodina, now) {
+    st.historie = st.historie.filter((x) => !(x.datum === dateKey(now) && x.hodina === String(hodina)));
+    st.historie.push({ datum: dateKey(now), wd: isoDay(now), hodina: String(hodina), tridy });
+    st.historie = st.historie.slice(-80);
+  }
+
   function screenKey(now) {
     if (relaceActive(now)) return `main|${st.relace.id}`;
     const p = isSchoolDay(now, ref.dnyBezProvozu) ? period(now, ref.zvoneni) : { type: 'free' };
     if (p.type === 'lesson') {
-      if (st.volno && st.volno.datum === dateKey(now) && st.volno.hodina === String(p.lesson.hodina)) return `volno|${p.lesson.hodina}`;
+      if (sameLesson(st.volno, now, p.lesson.hodina)) return `volno|${p.lesson.hodina}|${st.volno.rozvrh ? 'r' : ''}`;
       return `select|${p.lesson.hodina}`;
     }
     if (p.type === 'break') return `break|${p.po}`;
@@ -112,8 +176,9 @@ export async function render(el, ctx) {
     if (changed || before !== st.autoClosed.length) { saveState(st); if (!lessonOver) drawOutStrip(now); }
   }
 
-  function endRelace(now, redraw = true) {
+  function endRelace(now, redraw = true, byUser = false) {
     if (!st.relace) return;
+    if (byUser && st.relace.hodina !== 'mimo') st.declined = { datum: dateKey(now), hodina: String(st.relace.hodina) };
     ctx.outbox.update('relace', st.relace.id, { konec: now.toISOString() });
     st.relace = null;
     saveState(st);
@@ -121,50 +186,71 @@ export async function render(el, ctx) {
   }
 
   // ---------- obrazovky ----------
-  function header(now, title, eyebrow) {
+  function header(now, title, eyebrow, action) {
     clockEl = h('div', { class: 't-clock', 'aria-label': 'Čas' }, fmt.time(now));
     const gear = h('button', { class: 'gear', 'aria-label': 'Nastavení tabletu – podrž 2 sekundy' },
       h('span', { class: 'ring' }), h('span', { class: 'hint' }, 'podrž'));
     longPress(gear, 2000, openSettings);
     return h('div', { class: 't-head' },
       h('div', null, h('div', { class: 'eyebrow' }, eyebrow), h('h1', { class: 'title' }, title)),
-      h('span', { class: 'spacer' }), clockEl, gear);
+      h('span', { class: 'spacer' }), action || null, clockEl, gear);
+  }
+
+  // Otevře obrazovku ručně a podrží ji, dokud se nezmění stav tabletu.
+  function showManual(fn) {
+    pinned = screenKey(new Date());
+    lastKey = pinned;
+    fn();
   }
 
   function draw(now) {
     const key = lastKey || screenKey(now);
-    const [kind, arg] = key.split('|');
+    const [kind, arg, flag] = key.split('|');
     const r = room();
     if (kind === 'main') return drawMain(now);
     if (kind === 'select') return drawSelect(now, Number(arg));
     if (kind === 'volno') {
       return mount(el, header(now, 'Volná hodina', `${r.nazev} – ${arg}. hodina`),
         h('div', { class: 'state-screen' }, mark('opt', 'huge'),
-          h('p', { class: 'sub' }, 'Tuhle hodinu se odchody nezapisují. Tablet se probudí na další hodinu.'),
-          h('button', { class: 'btn', onclick: () => { st.volno = null; saveState(st); lastKey = null; tick(true); } }, 'Přece jen vybrat třídu')));
+          h('p', { class: 'sub' }, flag === 'r'
+            ? 'Podle rozvrhu se tu teď neučí, odchody se nezapisují.'
+            : 'Tuhle hodinu se odchody nezapisují. Tablet se probudí na další hodinu.'),
+          h('button', { class: 'btn primary', onclick: () => {
+            st.volno = null; st.declined = { datum: dateKey(now), hodina: String(arg) }; saveState(st);
+            lastKey = null; tick(true);
+          } }, 'Přece jen tu někdo je – vybrat třídu')));
     }
     if (kind === 'break') {
       const p = period(now, ref.zvoneni);
+      const next = scheduled(p.next.hodina, now);
       return mount(el, header(now, 'Přestávka', r.nazev),
         h('div', { class: 'state-screen' }, mark('ok', 'huge'),
           h('p', { class: 'sub' }, `O přestávce se odchody nezapisují. ${p.next.hodina}. hodina začíná v ${fmt.time(atMin(now, p.next.od))}.`),
-          h('button', { class: 'btn primary', onclick: () => drawSelect(now, p.next.hodina) }, `Vybrat třídu na ${p.next.hodina}. hodinu`)));
+          next ? h('p', { class: 'rozvrh-next' }, 'Podle rozvrhu: ', h('b', null, rozvrhLabel(next)),
+            next.volno ? '' : ' – hodina se spustí sama.') : null,
+          h('button', { class: next && !next.volno ? 'btn' : 'btn primary', onclick: () => showManual(() => drawSelect(new Date(), p.next.hodina)) },
+            next && !next.volno ? 'Přijde jiná třída' : `Vybrat třídu na ${p.next.hodina}. hodinu`)));
     }
     // mimo vyučování
     const free = !isSchoolDay(now, ref.dnyBezProvozu);
     return mount(el, header(now, free ? 'Dnes se neučí' : 'Mimo vyučování', r.nazev),
       h('div', { class: 'state-screen' }, mark('opt', 'huge'),
         h('p', { class: 'sub' }, free ? 'Dnes je den bez provozu.' : 'Odchody se zapisují jen během vyučovacích hodin.'),
-        h('button', { class: 'btn', onclick: () => drawSelect(now, 'mimo') }, 'Začít mimořádnou hodinu')));
+        h('button', { class: 'btn', onclick: () => showManual(() => drawSelect(new Date(), 'mimo')) }, 'Začít mimořádnou hodinu')));
   }
 
   // ---- výběr třídy ----
-  function drawSelect(now, hodina) {
-    const selected = new Set();
+  // change = učitel opravuje třídu v běžící hodině
+  function drawSelect(now, hodina, { change = false } = {}) {
     const r = room();
     const wd = isoDay(now);
+    const plan = scheduled(hodina, now);
+    const pre = change ? st.relace.tridy : [];
+    const selected = new Set(pre);
     const last = [...st.historie].reverse().find((x) => x.wd === wd && String(x.hodina) === String(hodina) && x.datum !== dateKey(now));
-    const startBtn = h('button', { class: 'btn primary', disabled: true, style: { minWidth: '220px' }, onclick: () => start([...selected]) }, 'Začít hodinu');
+    const verb = change ? 'Uložit' : 'Začít hodinu';
+    const startBtn = h('button', { class: 'btn primary', disabled: !selected.size, style: { minWidth: '220px' }, onclick: () => start([...selected]) },
+      selected.size ? `${verb} – ${[...selected].join(' + ')}` : verb);
     const cnt = (t) => ref.zaci.filter((z) => z.aktivni !== false && z.trida === t).length;
 
     const tiles = new Map();
@@ -177,19 +263,24 @@ export async function render(el, ctx) {
       if (selected.has(name)) selected.delete(name); else selected.add(name);
       tiles.get(name).setAttribute('aria-pressed', selected.has(name));
       startBtn.disabled = selected.size === 0;
-      startBtn.textContent = selected.size ? `Začít hodinu – ${[...selected].join(' + ')}` : 'Začít hodinu';
+      startBtn.textContent = selected.size ? `${verb} – ${[...selected].join(' + ')}` : verb;
     };
 
+    const hint = (label, tridy, btn) => h('div', { class: 'box fill', style: { marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' } },
+      h('span', null, label, h('b', null, tridy.length ? tridy.join(' + ') : 'smíšená skupina')),
+      h('button', { class: 'btn', onclick: () => start(tridy) }, btn));
     mount(el,
-      header(now, 'Kdo tu teď je?', `${r.nazev} – ${hodina === 'mimo' ? 'mimořádná hodina' : `${hodina}. hodina`}`),
-      h('p', { class: 'sub', style: { marginBottom: '16px' } }, 'Vyber třídu nebo dvě spojené. Žáci pak u sebe ťukají jméno, když odchází na toaletu.'),
-      last ? h('div', { class: 'box fill', style: { marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' } },
-        h('span', null, `Minulý týden tuhle hodinu: `, h('b', null, last.tridy.length ? last.tridy.join(' + ') : 'smíšená skupina')),
-        h('button', { class: 'btn primary', onclick: () => start(last.tridy) }, 'Stejná jako minule')) : null,
+      header(now, change ? 'Kdo tu teď opravdu je?' : 'Kdo tu teď je?', `${r.nazev} – ${hodina === 'mimo' ? 'mimořádná hodina' : `${hodina}. hodina`}`,
+        change ? h('button', { class: 'btn', onclick: () => { pinned = null; lastKey = null; tick(true); } }, 'Zpět – třída sedí') : null),
+      h('p', { class: 'sub', style: { marginBottom: '16px' } }, change
+        ? 'Vyber třídu, která tu opravdu je. Co už žáci v této hodině zapsali, zůstane uložené.'
+        : 'Vyber třídu nebo dvě spojené. Žáci pak u sebe ťukají jméno, když odchází na toaletu.'),
+      plan && !plan.volno && !change ? hint('Podle rozvrhu: ', plan.tridy, 'Podle rozvrhu') : null,
+      !plan && last ? hint('Minulý týden tuhle hodinu: ', last.tridy, 'Stejná jako minule') : null,
       h('div', { class: 'grades' }, [...byGrade.entries()].map(([g, list]) => h('div', { class: 'grade-row' },
         h('div', { class: 'lbl' }, `${g}. roč.`),
         h('div', { class: 'class-grid' }, list.map((t) => {
-          const b = h('button', { class: 'class-tile', 'aria-pressed': 'false', onclick: () => toggle(t.nazev) },
+          const b = h('button', { class: 'class-tile', 'aria-pressed': String(selected.has(t.nazev)), onclick: () => toggle(t.nazev) },
             h('span', null, t.nazev, h('span', { class: 'cnt' }, `${cnt(t.nazev)} žáků`)));
           tiles.set(t.nazev, b);
           return b;
@@ -198,20 +289,29 @@ export async function render(el, ctx) {
       h('div', { class: 'btn-row' },
         startBtn,
         h('button', { class: 'btn', onclick: () => start([]) }, 'Smíšená skupina – žáky najdu jménem'),
-        hodina !== 'mimo' ? h('button', { class: 'btn ghost', onclick: () => { st.volno = { datum: dateKey(now), hodina: String(hodina) }; saveState(st); lastKey = null; tick(true); } }, 'Bez třídy – volno') : null));
+        hodina !== 'mimo' && !change ? h('button', { class: 'btn ghost', onclick: () => { st.volno = { datum: dateKey(now), hodina: String(hodina) }; saveState(st); lastKey = null; tick(true); } }, 'Bez třídy – volno') : null));
 
     function start(tridy) {
-      const n = new Date();
-      const rel = { id: uid(), ucebna: roomId, tridy, hodina: String(hodina), zacatek: n.toISOString(), konec: null, spustil: user.email };
-      ctx.outbox.add('relace', rel);
-      st.relace = { ...rel, datum: dateKey(n) };
-      st.volno = null;
-      st.historie.push({ datum: dateKey(n), wd: isoDay(n), hodina: String(hodina), tridy });
-      st.historie = st.historie.slice(-80);
-      saveState(st);
+      if (change) {
+        changeRelace(tridy);
+        toast(`Třída změněna na ${tridy.length ? tridy.join(' + ') : 'smíšenou skupinu'}.`);
+      } else {
+        startRelace(tridy, hodina, plan && !plan.volno && sameSet(plan.tridy, tridy) ? 'rozvrh' : 'ucitel');
+      }
       lastKey = null;
       tick(true);
     }
+  }
+
+  // „Jiná třída“: když má učebna PIN, chce ho (ať třídu nemění žáci).
+  async function askChange() {
+    const r = room();
+    if (r.pin && user.role === 'ucebna') {
+      const p = await promptDialog('Změnu třídy potvrď PINem učebny', { type: 'password' });
+      if (p === null) return;
+      if (p !== String(r.pin)) { toast('Špatný PIN.'); return; }
+    }
+    showManual(() => drawSelect(new Date(), st.relace.hodina === 'mimo' ? 'mimo' : Number(st.relace.hodina), { change: true }));
   }
 
   // ---- hlavní obrazovka ----
@@ -221,7 +321,7 @@ export async function render(el, ctx) {
     const title = rel.tridy.length ? rel.tridy.join(' + ') : 'Smíšená skupina';
     outStripEl = h('div', { class: 'out-strip', 'aria-live': 'polite' });
     gridWrap = h('div');
-    const search = h('input', { type: 'search', placeholder: 'Žák z jiné třídy? Napiš příjmení…', 'aria-label': 'Hledat žáka', style: { maxWidth: '420px', minHeight: '56px', fontSize: '19px' } });
+    const search = h('input', { type: 'search', placeholder: 'Napiš příjmení…', 'aria-label': 'Hledat žáka podle příjmení', style: { maxWidth: '420px', minHeight: '56px', fontSize: '19px' } });
     const results = h('div', { class: 'student-grid', style: { marginTop: '10px' } });
     search.addEventListener('input', () => {
       const q = normalize(search.value);
@@ -230,11 +330,19 @@ export async function render(el, ctx) {
       mount(results, hits.length ? hits.map((z) => studentTile(z, true)) : h('p', { class: 'muted' }, 'Nikoho takového nevidím.'));
     });
 
+    // Prvních 10 minut hodiny spuštěné podle rozvrhu připomeneme učiteli, ať třídu zkontroluje.
+    const lessonMin = (now - new Date(rel.zacatek)) / 60000;
+    const remind = rel.puvod === 'rozvrh' && lessonMin < 10;
+    const sub = `${r.nazev} – ${rel.hodina === 'mimo' ? 'mimořádná hodina' : `${rel.hodina}. hodina`}${rel.puvod === 'rozvrh' ? ' – podle rozvrhu' : ''}${rel.puvod === 'zmena' ? ' – změněno učitelem' : ''}`;
     mount(el,
-      header(now, title, `${r.nazev} – ${rel.hodina === 'mimo' ? 'mimořádná hodina' : `${rel.hodina}. hodina`}`),
+      header(now, title, sub, h('button', { class: 'btn change-btn', onclick: askChange }, 'Jiná třída')),
+      remindEl = remind ? h('div', { class: 'rozvrh-check' },
+        h('span', null, 'Je tu opravdu ', h('b', null, title), '? Pokud učíte jinou třídu, ťukněte na ', h('b', null, 'Jiná třída'), ' – klidně i v průběhu hodiny.'),
+        h('button', { class: 'btn small', onclick: askChange }, 'Jiná třída')) : null,
       outStripEl,
       gridWrap,
       h('hr', { class: 'rule-thin' }),
+      h('label', { class: 'search-label' }, h('b', null, 'Nejsi v seznamu?'), ' Najdi se podle příjmení:'),
       h('div', null, search, results));
     drawOutStrip(now);
     drawGrid();
@@ -381,8 +489,8 @@ export async function render(el, ctx) {
       h('hr', { class: 'rule' }),
       h('div', { class: 'stack' },
         st.relace ? h('div', { class: 'btn-row' },
-          h('button', { class: 'btn primary', onclick: () => { close(); const p = currentLesson(now); endRelace(now, false); lastKey = null; drawSelect(now, p ? p.lesson.hodina : 'mimo'); } }, 'Změnit třídu'),
-          h('button', { class: 'btn', onclick: () => { close(); endRelace(now); } }, 'Ukončit hodinu')) : null,
+          h('button', { class: 'btn primary', onclick: () => { close(); showManual(() => drawSelect(new Date(), st.relace.hodina === 'mimo' ? 'mimo' : Number(st.relace.hodina), { change: true })); } }, 'Změnit třídu'),
+          h('button', { class: 'btn', onclick: () => { close(); endRelace(now, true, true); } }, 'Ukončit hodinu')) : null,
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: override || null, onchange: (e) => { override = e.target.checked; drawGrid(); } }),
           'Pustit dalšího žáka, i když je někdo venku (jen pro tuto chvíli)'),
         user.role !== 'ucebna' ? h('button', { class: 'btn', onclick: () => { close(); localStorage.removeItem(ADMIN_ROOM_KEY); ctx.navigate('#/trida'); } }, 'Změnit učebnu') : null,
@@ -408,4 +516,9 @@ export async function render(el, ctx) {
           ctx.navigate('#/trida');
         } }, u.nazev))))));
   }
+}
+
+function sameSet(a, b) {
+  const x = [...(a || [])].sort().join('|'), y = [...(b || [])].sort().join('|');
+  return x === y;
 }

@@ -158,12 +158,12 @@ a zkontroluj `roleGroups` (krok 3). Nahraj změnu na GitHub. V `sw.js` zvyš `VE
 
 1. Přihlas se svým účtem. Uvidíš Správu.
 2. **Správa → Instalace SharePointu → Zkontrolovat a založit seznamy.** Microsoft se jednou zeptá na oprávnění.
-3. V logu uvidíš zakládání seznamů: Toalety, Ucebny, Tridy, Zaci, Zvoneni, PlanDozoru, RozpisKontrol, DnyBezProvozu, ZvysenyDohled, Nastaveni, Relace, Navstevy, Kontroly, Incidenty, SlotyKontrol. Výchozí toalety (6), zvonění a rozpis se doplní samy.
+3. V logu uvidíš zakládání seznamů: Toalety, Ucebny, Tridy, Zaci, Zvoneni, PlanDozoru, RozpisKontrol, Rozvrh, DnyBezProvozu, ZvysenyDohled, Nastaveni, Relace, Navstevy, Kontroly, Incidenty, SlotyKontrol. Výchozí toalety (6), zvonění a rozpis se doplní samy.
 4. **Ručně přidej index na sloupec Title** v seznamech `Navstevy`, `Kontroly`, `Incidenty`, `Relace`: v SharePointu otevři seznam → **ozubené kolo → Nastavení seznamu → Indexované sloupce → Vytvořit nový index → Název (Title)**. Bez toho by po pár tisících záznamech začalo hledání selhávat.
 
 Tlačítko jde spustit znovu kdykoli – existující data nemění, jen doplní, co chybí.
 
-✔ V SharePoint webu vidíš 15 seznamů.
+✔ V SharePoint webu vidíš 16 seznamů.
 
 ---
 
@@ -175,9 +175,10 @@ V aplikaci **Správa → Číselníky a pravidla**:
 2. **Učebny a tablety** – každá učebna: název, patro, e-mail tabletu z kroku 4, kolik žáků smí být venku (1), případně PIN pro nastavení tabletu.
 3. **Třídy** – založí se samy při importu žáků.
 4. **Žáci a import** – ve Škole OnLine vyexportuj seznam žáků (jméno, příjmení, třída, pohlaví) do Excelu a nahraj ho. Aplikace ukáže, kdo přibyl, kdo je přeřazený a kdo odešel, a teprve pak uloží. V září import zopakuj.
-5. **Plán dozorů** – kdo má o které přestávce dozor na kterém patře. Učitele do nabídky přidáš dole (jméno + e-mail).
-6. **Rozpis kontrol** – které kontroly jsou povinné. Výchozí: na konci každé přestávky povinná, na začátku nepovinná.
-7. **Dny bez provozu** – prázdniny a volna.
+5. **Rozvrh učeben** (Správa → Rozvrh učeben, umí i vedení) – u kmenových učeben stačí „Rychlé vyplnění“ třídou, pak oprav hodiny, kdy je třída jinde. Podle rozvrhu tablet sám spouští hodiny.
+6. **Plán dozorů** – kdo má o které přestávce dozor na kterém patře. Učitele do nabídky přidáš dole (jméno + e-mail).
+7. **Rozpis kontrol** – které kontroly jsou povinné. Výchozí: na konci každé přestávky povinná, na začátku nepovinná.
+8. **Dny bez provozu** – prázdniny a volna.
 
 ✔ Ve Správě → Plnění kontrol se objevují očekávané kontroly.
 
@@ -248,15 +249,16 @@ Hlídá povinné kontroly. Když dozor do konce okna nic nezapíše, přijde e-m
        - Stejnou akci Teams přidej ještě jednou s příjemcem pan Švarc (případně pro každého člena vedení zvlášť).
 11. **Uložit → Test → Ručně.** Mimo vyučování proběhne naprázdno.
 
-Sloty v seznamu `SlotyKontrol` přepočítává aplikace sama, kdykoli uložíš zvonění, plán dozorů, rozpis nebo toalety.
+Ve fázi 1 je seznam `SlotyKontrol` prázdný (upozornění vypnutá v Obecném nastavení), takže tok nic neposílá. Až upozornění zapneš, aplikace sloty doplní. Sloty v seznamu `SlotyKontrol` přepočítává aplikace sama, kdykoli uložíš zvonění, plán dozorů, rozpis nebo toalety.
 
 ### Tok 2 – Nový incident (vedení)
 
 1. **Vytvořit → Automatizovaný cloudový tok**, trigger **SharePoint → Při vytvoření položky**, web Záchody, seznam `Incidenty`.
-2. **Odeslat e-mail (V2)** vedení:
+2. **Získat položky** `upozorneni`: seznam `Nastaveni`, filtr `Title eq 'upozorneni'`. Pak **Podmínka**: `first(body('upozorneni')?['value'])?['Hodnota']` je rovno `true`. Všechno další patří do větve **Ano** – ve fázi 1 (upozornění vypnutá) tok nic nepošle.
+3. **Odeslat e-mail (V2)** vedení:
    Předmět: `Škoda na WC: @{triggerOutputs()?['body/Toaleta']} – @{triggerOutputs()?['body/Kategorie']}`
    Text: `Nahlásil(a) @{triggerOutputs()?['body/Jmeno']}. Detail: https://tadeasfirich.github.io/zachody/#/sprava/incidenty/@{triggerOutputs()?['body/Title']}`
-3. **Teams – Flow bot** stejnou zprávu panu Švarcovi.
+4. **Teams – Flow bot** stejnou zprávu panu Švarcovi.
 
 ### Tok 3 – Noční mazání starých záznamů
 
